@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -49,10 +49,9 @@ function App() {
         <div className="content">
           <Routes>
             {/* 공개 경로 */}
-            <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+            <Route path="/" element={user ? <PrivateRoute user={user}><Dashboard /></PrivateRoute> : <Login />} />
             
             {/* 보호된 경로 */}
-            <Route path="/" element={<PrivateRoute user={user}><Dashboard /></PrivateRoute>} />
             <Route path="/gallery" element={<PrivateRoute user={user}><Gallery /></PrivateRoute>} />
             <Route path="/map" element={<PrivateRoute user={user}><MemoryMap /></PrivateRoute>} />
             <Route path="/messages" element={<PrivateRoute user={user}><Messages /></PrivateRoute>} />
