@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/memories-website/static/css/main.ac87535b.css",
-    "main.js": "/memories-website/static/js/main.bb8586a2.js",
+    "main.js": "/memories-website/static/js/main.2ed23aee.js",
     "static/js/453.224345c8.chunk.js": "/memories-website/static/js/453.224345c8.chunk.js",
     "index.html": "/memories-website/index.html",
     "main.ac87535b.css.map": "/memories-website/static/css/main.ac87535b.css.map",
-    "main.bb8586a2.js.map": "/memories-website/static/js/main.bb8586a2.js.map",
+    "main.2ed23aee.js.map": "/memories-website/static/js/main.2ed23aee.js.map",
     "453.224345c8.chunk.js.map": "/memories-website/static/js/453.224345c8.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.ac87535b.css",
-    "static/js/main.bb8586a2.js"
+    "static/js/main.2ed23aee.js"
   ]
 }
