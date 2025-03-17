@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import styled from 'styled-components';
+import { useAuth } from '../contexts/AuthContext';
 
 // 스타일 컴포넌트
 const NavContainer = styled.nav`
@@ -90,13 +91,30 @@ const MenuToggle = styled.button`
   }
 `;
 
+const UserSection = styled.div`
+  display: flex;
+  align-items: center;
+`;
+
+const UserInfo = styled.div`
+  margin-right: 10px;
+`;
+
+const UserEmail = styled.span`
+  font-size: 0.9rem;
+  color: #666;
+`;
+
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
   
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await logout();
+      navigate('/login');
     } catch (error) {
       console.error('로그아웃 오류:', error);
     }
@@ -150,6 +168,17 @@ const Navbar = () => {
             <LogoutButton onClick={handleLogout}>로그아웃</LogoutButton>
           </NavItem>
         </NavLinks>
+        
+        <UserSection>
+          {currentUser && (
+            <>
+              <UserInfo>
+                <UserEmail>{currentUser.email}</UserEmail>
+              </UserInfo>
+              <LogoutButton onClick={handleLogout}>로그아웃</LogoutButton>
+            </>
+          )}
+        </UserSection>
       </NavContent>
     </NavContainer>
   );

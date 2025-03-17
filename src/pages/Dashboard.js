@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 
 // 스타일 컴포넌트
 const DashboardContainer = styled.div`
@@ -74,15 +76,17 @@ const RecentPhotosGrid = styled.div`
   gap: 10px;
 `;
 
-const PhotoThumbnail = styled.div`
-  background-color: #eee;
-  border-radius: 5px;
+const PhotoThumbnail = styled.img`
+  width: 100%;
   height: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #888;
-  font-size: 0.8rem;
+  object-fit: cover;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
 `;
 
 const AnniversaryItem = styled.div`
@@ -141,15 +145,101 @@ const ActivityTime = styled.div`
   color: #888;
 `;
 
+const LoadingText = styled.div`
+  text-align: center;
+  color: #888;
+`;
+
+const EmptyText = styled.div`
+  text-align: center;
+  color: #888;
+`;
+
+const PhotoGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+`;
+
 const Dashboard = () => {
+  const [recentPhotos, setRecentPhotos] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadRecentPhotos();
+    loadRecentActivities();
+  }, []);
+
+  const loadRecentPhotos = async () => {
+    try {
+      const photosRef = collection(db, 'photos');
+      const q = query(photosRef, orderBy('date', 'desc'), limit(4));
+      const querySnapshot = await getDocs(q);
+      
+      const photos = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      setRecentPhotos(photos);
+    } catch (error) {
+      console.error('최근 사진 로드 오류:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadRecentActivities = async () => {
+    try {
+      // 최근 사진 업로드 활동
+      const photosRef = collection(db, 'photos');
+      const photosQuery = query(photosRef, orderBy('date', 'desc'), limit(5));
+      const photosSnapshot = await getDocs(photosQuery);
+      
+      // 최근 메시지 활동
+      const messagesRef = collection(db, 'messages');
+      const messagesQuery = query(messagesRef, orderBy('date', 'desc'), limit(5));
+      const messagesSnapshot = await getDocs(messagesQuery);
+      
+      // 최근 지도 메모리 활동
+      const memoriesRef = collection(db, 'memories');
+      const memoriesQuery = query(memoriesRef, orderBy('date', 'desc'), limit(5));
+      const memoriesSnapshot = await getDocs(memoriesQuery);
+
+      const activities = [
+        ...photosSnapshot.docs.map(doc => ({
+          type: 'photo',
+          title: '새로운 사진이 업로드되었습니다',
+          date: doc.data().date,
+          data: doc.data()
+        })),
+        ...messagesSnapshot.docs.map(doc => ({
+          type: 'message',
+          title: '새로운 메시지가 도착했습니다',
+          date: doc.data().date,
+          data: doc.data()
+        })),
+        ...memoriesSnapshot.docs.map(doc => ({
+          type: 'memory',
+          title: '새로운 추억이 기록되었습니다',
+          date: doc.data().date,
+          data: doc.data()
+        }))
+      ].sort((a, b) => new Date(b.date) - new Date(a.date))
+       .slice(0, 5);
+
+      setRecentActivities(activities);
+    } catch (error) {
+      console.error('활동 로드 오류:', error);
+    }
+  };
+
   return (
     <DashboardContainer>
       <WelcomeSection>
-        <Title>환영합니다!</Title>
-        <WelcomeText>
-          우리의 소중한 추억을 공유하고 저장하는 공간입니다.
-          함께한 순간들을 기록하고 간직하세요.
-        </WelcomeText>
+        <Title>우리의 추억</Title>
+        <Subtitle>함께 만드는 특별한 순간들</Subtitle>
       </WelcomeSection>
       
       <Subtitle>대시보드</Subtitle>
@@ -157,12 +247,17 @@ const Dashboard = () => {
       <DashboardGrid>
         <DashboardCard>
           <CardTitle>최근 사진</CardTitle>
-          <RecentPhotosGrid>
-            <PhotoThumbnail>사진 1</PhotoThumbnail>
-            <PhotoThumbnail>사진 2</PhotoThumbnail>
-            <PhotoThumbnail>사진 3</PhotoThumbnail>
-            <PhotoThumbnail>사진 4</PhotoThumbnail>
-          </RecentPhotosGrid>
+          <PhotoGrid>
+            {loading ? (
+              <LoadingText>로딩 중...</LoadingText>
+            ) : recentPhotos.length > 0 ? (
+              recentPhotos.map(photo => (
+                <PhotoThumbnail key={photo.id} src={photo.url} alt={photo.title} />
+              ))
+            ) : (
+              <EmptyText>아직 업로드된 사진이 없습니다.</EmptyText>
+            )}
+          </PhotoGrid>
         </DashboardCard>
         
         <DashboardCard>
@@ -183,27 +278,23 @@ const Dashboard = () => {
         
         <DashboardCard>
           <CardTitle>최근 활동</CardTitle>
-          <ActivityItem>
-            <ActivityDot />
-            <ActivityContent>
-              <ActivityTitle>새로운 사진 5장이 추가되었습니다.</ActivityTitle>
-              <ActivityTime>3시간 전</ActivityTime>
-            </ActivityContent>
-          </ActivityItem>
-          <ActivityItem>
-            <ActivityDot />
-            <ActivityContent>
-              <ActivityTitle>홍대 카페에 새로운 추억이 기록되었습니다.</ActivityTitle>
-              <ActivityTime>어제</ActivityTime>
-            </ActivityContent>
-          </ActivityItem>
-          <ActivityItem>
-            <ActivityDot />
-            <ActivityContent>
-              <ActivityTitle>'한강 데이트' 메시지에 댓글이 추가되었습니다.</ActivityTitle>
-              <ActivityTime>2일 전</ActivityTime>
-            </ActivityContent>
-          </ActivityItem>
+          {loading ? (
+            <LoadingText>로딩 중...</LoadingText>
+          ) : recentActivities.length > 0 ? (
+            recentActivities.map((activity, index) => (
+              <ActivityItem key={index}>
+                <ActivityDot />
+                <ActivityContent>
+                  <ActivityTitle>{activity.title}</ActivityTitle>
+                  <ActivityTime>
+                    {new Date(activity.date).toLocaleDateString()}
+                  </ActivityTime>
+                </ActivityContent>
+              </ActivityItem>
+            ))
+          ) : (
+            <EmptyText>아직 활동 내역이 없습니다.</EmptyText>
+          )}
         </DashboardCard>
       </DashboardGrid>
     </DashboardContainer>

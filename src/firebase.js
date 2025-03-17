@@ -3,23 +3,28 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getAnalytics } from 'firebase/analytics';
 
 // Firebase 구성 객체
-// 실제 프로젝트에서는 이 정보를 환경 변수로 관리하는 것이 좋습니다
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBGGrbeibF1To6O3jmhs6N2IHnstroty38",
+  authDomain: "memories-website-a089b.firebaseapp.com",
+  projectId: "memories-website-a089b",
+  storageBucket: "memories-website-a089b.firebasestorage.app",
+  messagingSenderId: "709480777081",
+  appId: "1:709480777081:web:14a50629563ca882a25ba8",
+  measurementId: "G-0WKR00N26D"
 };
 
 // Firebase 앱 초기화
 const app = initializeApp(firebaseConfig);
 
+// Analytics 초기화
+const analytics = getAnalytics(app);
+
 // Firebase 서비스 내보내기
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+export { analytics };
 export default app; 
