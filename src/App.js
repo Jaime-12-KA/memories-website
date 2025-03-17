@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { ThemeProvider as StyledThemeProvider, createGlobalStyle } from 'styled-components';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 // 컴포넌트 불러오기
 import Navbar from './components/Navbar';
@@ -20,9 +21,21 @@ import Settings from './pages/Settings';
 
 import './App.css';
 
-function App() {
+// 전역 스타일 정의
+const GlobalStyle = createGlobalStyle`
+  body {
+    background-color: ${({ theme }) => theme.background};
+    color: ${({ theme }) => theme.text};
+    transition: all 0.3s ease;
+  }
+`;
+
+function ThemedApp() {
+  const { theme } = useTheme();
+  
   return (
-    <AuthProvider>
+    <StyledThemeProvider theme={theme}>
+      <GlobalStyle />
       <Router>
         <AppContainer>
           <Navbar />
@@ -83,6 +96,16 @@ function App() {
           </MainContent>
         </AppContainer>
       </Router>
+    </StyledThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <ThemeProvider>
+        <ThemedApp />
+      </ThemeProvider>
     </AuthProvider>
   );
 }
@@ -91,6 +114,7 @@ const AppContainer = styled.div`
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background-color: ${({ theme }) => theme.background};
 `;
 
 const MainContent = styled.div`

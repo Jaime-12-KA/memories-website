@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const TimelineContainer = styled.div`
@@ -177,45 +177,127 @@ const LoadMoreButton = styled.button`
   }
 `;
 
+// 이벤트 추가 폼 스타일
+const AddEventForm = styled.form`
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+`;
+
+const FormTitle = styled.h3`
+  font-size: 1.2rem;
+  color: #333;
+  margin-bottom: 15px;
+`;
+
+const InputGroup = styled.div`
+  margin-bottom: 15px;
+`;
+
+const Label = styled.label`
+  display: block;
+  margin-bottom: 5px;
+  color: #555;
+  font-size: 0.9rem;
+`;
+
+const Input = styled.input`
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 1rem;
+`;
+
+const TextArea = styled.textarea`
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 1rem;
+  min-height: 100px;
+  resize: vertical;
+`;
+
+const Select = styled.select`
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 1rem;
+`;
+
+const SubmitButton = styled.button`
+  background-color: #4a86e8;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #3a76d8;
+  }
+
+  &:disabled {
+    background-color: #a2c0f7;
+    cursor: not-allowed;
+  }
+`;
+
 const categories = [
   { id: 'all', name: '전체' },
   { id: 'date', name: '데이트' },
   { id: 'travel', name: '여행' },
   { id: 'food', name: '맛집' },
   { id: 'cafe', name: '카페' },
-  { id: 'special', name: '특별한 날' }
+  { id: 'special', name: '특별한 날' },
+  { id: 'event', name: '중요 이벤트' }
 ];
 
 const Timeline = () => {
-  const [memories, setMemories] = useState([]);
+  const [events, setEvents] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const memoriesPerPage = 10;
+  const [submitting, setSubmitting] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    date: '',
+    category: 'event',
+    description: '',
+    imageUrl: ''
+  });
+  const eventsPerPage = 10;
 
   useEffect(() => {
-    loadMemories();
+    loadEvents();
   }, [selectedCategory]);
 
-  const loadMemories = async () => {
+  const loadEvents = async () => {
     setLoading(true);
     try {
-      const memoriesRef = collection(db, 'memories');
-      const q = query(memoriesRef, orderBy('date', 'desc'));
+      // 'events' 컬렉션에서 데이터 로드 (기존 'memories' 대신)
+      const eventsRef = collection(db, 'events');
+      const q = query(eventsRef, orderBy('date', 'desc'));
       const querySnapshot = await getDocs(q);
       
-      let loadedMemories = querySnapshot.docs.map(doc => ({
+      let loadedEvents = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
 
       if (selectedCategory !== 'all') {
-        loadedMemories = loadedMemories.filter(memory => memory.category === selectedCategory);
+        loadedEvents = loadedEvents.filter(event => event.category === selectedCategory);
       }
 
-      setMemories(loadedMemories);
+      setEvents(loadedEvents);
     } catch (error) {
-      console.error('추억 로드 오류:', error);
+      console.error('이벤트 로드 오류:', error);
     } finally {
       setLoading(false);
     }
@@ -226,8 +308,50 @@ const Timeline = () => {
     setPage(1);
   };
 
-  const displayedMemories = memories.slice(0, page * memoriesPerPage);
-  const hasMore = memories.length > displayedMemories.length;
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewEvent(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newEvent.title.trim() || !newEvent.date.trim() || !newEvent.description.trim()) {
+      alert('제목, 날짜, 설명을 모두 입력해주세요.');
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      // 새 이벤트를 'events' 컬렉션에 추가
+      await addDoc(collection(db, 'events'), {
+        ...newEvent,
+        createdAt: new Date().toISOString()
+      });
+      
+      alert('이벤트가 성공적으로 추가되었습니다!');
+      setNewEvent({
+        title: '',
+        date: '',
+        category: 'event',
+        description: '',
+        imageUrl: ''
+      });
+      
+      // 이벤트 목록 새로고침
+      loadEvents();
+    } catch (error) {
+      console.error('이벤트 추가 오류:', error);
+      alert('이벤트 추가 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const displayedEvents = events.slice(0, page * eventsPerPage);
+  const hasMore = events.length > displayedEvents.length;
 
   const getCategoryName = (categoryId) => {
     const category = categories.find(cat => cat.id === categoryId);
@@ -251,32 +375,108 @@ const Timeline = () => {
         </FilterContainer>
       </Header>
 
-      <TimelineWrapper>
-        {displayedMemories.map((memory, index) => (
-          <TimelineItem
-            key={memory.id}
-            position={index % 2 === 0 ? 'left' : 'right'}
+      {/* 새 이벤트 추가 폼 */}
+      <AddEventForm onSubmit={handleSubmit}>
+        <FormTitle>새로운 이벤트 추가하기</FormTitle>
+        <InputGroup>
+          <Label htmlFor="title">제목</Label>
+          <Input
+            id="title"
+            name="title"
+            value={newEvent.title}
+            onChange={handleInputChange}
+            required
+          />
+        </InputGroup>
+
+        <InputGroup>
+          <Label htmlFor="date">날짜</Label>
+          <Input
+            id="date"
+            name="date"
+            type="date"
+            value={newEvent.date}
+            onChange={handleInputChange}
+            required
+          />
+        </InputGroup>
+
+        <InputGroup>
+          <Label htmlFor="category">카테고리</Label>
+          <Select
+            id="category"
+            name="category"
+            value={newEvent.category}
+            onChange={handleInputChange}
           >
-            <TimelineDot />
-            <TimelineContent position={index % 2 === 0 ? 'left' : 'right'}>
-              {memory.photoUrl && (
-                <MemoryImage src={memory.photoUrl} alt={memory.title} />
-              )}
-              <CategoryTag>{getCategoryName(memory.category)}</CategoryTag>
-              <MemoryTitle>{memory.title}</MemoryTitle>
-              <MemoryDate>{new Date(memory.date).toLocaleDateString()}</MemoryDate>
-              <MemoryDescription>{memory.description}</MemoryDescription>
-            </TimelineContent>
-          </TimelineItem>
-        ))}
-      </TimelineWrapper>
+            {categories.slice(1).map(category => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        </InputGroup>
+
+        <InputGroup>
+          <Label htmlFor="imageUrl">이미지 URL (선택사항)</Label>
+          <Input
+            id="imageUrl"
+            name="imageUrl"
+            value={newEvent.imageUrl}
+            onChange={handleInputChange}
+            placeholder="https://example.com/image.jpg"
+          />
+        </InputGroup>
+
+        <InputGroup>
+          <Label htmlFor="description">설명</Label>
+          <TextArea
+            id="description"
+            name="description"
+            value={newEvent.description}
+            onChange={handleInputChange}
+            required
+          />
+        </InputGroup>
+
+        <SubmitButton type="submit" disabled={submitting}>
+          {submitting ? '추가 중...' : '이벤트 추가하기'}
+        </SubmitButton>
+      </AddEventForm>
+
+      {/* 타임라인 표시 */}
+      {loading ? (
+        <p>로딩 중...</p>
+      ) : events.length === 0 ? (
+        <p>이벤트가 없습니다. 첫 번째 이벤트를 추가해보세요!</p>
+      ) : (
+        <TimelineWrapper>
+          {displayedEvents.map((event, index) => (
+            <TimelineItem 
+              key={event.id} 
+              position={index % 2 === 0 ? 'left' : 'right'}
+            >
+              <TimelineDot />
+              <TimelineContent position={index % 2 === 0 ? 'left' : 'right'}>
+                {event.imageUrl && (
+                  <MemoryImage src={event.imageUrl} alt={event.title} />
+                )}
+                <CategoryTag>{getCategoryName(event.category)}</CategoryTag>
+                <MemoryTitle>{event.title}</MemoryTitle>
+                <MemoryDate>{event.date}</MemoryDate>
+                <MemoryDescription>{event.description}</MemoryDescription>
+              </TimelineContent>
+            </TimelineItem>
+          ))}
+        </TimelineWrapper>
+      )}
 
       {hasMore && (
-        <LoadMoreButton
+        <LoadMoreButton 
           onClick={() => setPage(prev => prev + 1)}
           disabled={loading}
         >
-          {loading ? '로딩 중...' : '더 보기'}
+          더 보기
         </LoadMoreButton>
       )}
     </TimelineContainer>

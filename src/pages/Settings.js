@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { updateProfile, updateEmail, updatePassword } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { useTheme } from '../contexts/ThemeContext';
 
 const SettingsContainer = styled.div`
   max-width: 800px;
@@ -155,6 +156,8 @@ const Settings = () => {
     darkMode: false
   });
 
+  const { darkMode, toggleDarkMode } = useTheme();
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -162,13 +165,14 @@ const Settings = () => {
         setSettings(prev => ({
           ...prev,
           displayName: user.displayName || '',
-          email: user.email || ''
+          email: user.email || '',
+          darkMode: darkMode
         }));
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [darkMode]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -389,16 +393,20 @@ const Settings = () => {
             <Switch>
               <SwitchInput
                 type="checkbox"
+                checked={darkMode}
+                onChange={toggleDarkMode}
+                id="darkMode"
                 name="darkMode"
-                checked={settings.darkMode}
-                onChange={handleChange}
               />
               <SwitchSlider />
               다크 모드
             </Switch>
+            <p style={{ marginTop: '8px', fontSize: '0.9rem', color: '#666' }}>
+              어두운 테마를 선호하시면 활성화하세요
+            </p>
           </FormGroup>
           <Button type="submit" disabled={loading}>
-            {loading ? '저장 중...' : '테마 설정 저장'}
+            {loading ? '업데이트 중...' : '테마 설정 저장'}
           </Button>
           {success && <SuccessMessage>{success}</SuccessMessage>}
           {error && <ErrorMessage>{error}</ErrorMessage>}

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 // 스타일 컴포넌트
 const LoginContainer = styled.div`
@@ -123,6 +125,15 @@ const Login = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
+
+  // 사용자가 이미 로그인된 경우 홈페이지로 리다이렉트
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/');
+    }
+  }, [currentUser, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -136,9 +147,11 @@ const Login = () => {
           throw new Error('비밀번호가 일치하지 않습니다.');
         }
         await createUserWithEmailAndPassword(auth, email, password);
+        navigate('/');
       } else {
         // 로그인
         await signInWithEmailAndPassword(auth, email, password);
+        navigate('/');
       }
     } catch (error) {
       let errorMessage = '오류가 발생했습니다.';
