@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { collection, getDocs, addDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const TimelineContainer = styled.div`
   max-width: 1200px;
@@ -249,6 +250,70 @@ const SubmitButton = styled.button`
   }
 `;
 
+const ToggleFormButton = styled.button`
+  display: block;
+  width: 200px;
+  margin: 30px auto;
+  padding: 10px 20px;
+  background-color: #4a86e8;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #3a76d8;
+  }
+`;
+
+const FileUploadContainer = styled.div`
+  margin-bottom: 15px;
+  position: relative;
+`;
+
+const FileInput = styled.input`
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+`;
+
+const FileUploadButton = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border: 1px dashed #ddd;
+  border-radius: 5px;
+  background-color: #f8f9fa;
+  cursor: pointer;
+  height: 100px;
+
+  &:hover {
+    background-color: #e9ecef;
+  }
+`;
+
+const ImagePreview = styled.div`
+  margin-top: 10px;
+  img {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 5px;
+  }
+`;
+
+const CompactAddEventForm = styled(AddEventForm)`
+  max-width: 500px;
+  margin: 20px auto 30px;
+`;
+
 const categories = [
   { id: 'all', name: '전체' },
   { id: 'date', name: '데이트' },
@@ -265,6 +330,7 @@ const Timeline = () => {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [newEvent, setNewEvent] = useState({
     title: '',
     date: '',
@@ -272,6 +338,10 @@ const Timeline = () => {
     description: '',
     imageUrl: ''
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
   const eventsPerPage = 10;
 
   useEffect(() => {
@@ -281,7 +351,7 @@ const Timeline = () => {
   const loadEvents = async () => {
     setLoading(true);
     try {
-      // 'events' 컬렉션에서 데이터 로드 (기존 'memories' 대신)
+      // 'events' 컬렉션에서 데이터 로드
       const eventsRef = collection(db, 'events');
       const q = query(eventsRef, orderBy('date', 'desc'));
       const querySnapshot = await getDocs(q);
@@ -316,6 +386,48 @@ const Timeline = () => {
     }));
   };
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // 이미지 파일 타입 검사
+    if (!file.type.match('image.*')) {
+      alert('이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    
+    // 파일 크기 제한 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('파일 크기가 5MB를 초과할 수 없습니다.');
+      return;
+    }
+    
+    setImageFile(file);
+    
+    // 이미지 미리보기 생성
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 이미지 업로드 함수
+  const uploadImage = async (file) => {
+    if (!file) return null;
+    
+    const storageRef = ref(storage, `timeline_images/${Date.now()}_${file.name}`);
+    
+    try {
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      console.error('이미지 업로드 오류:', error);
+      throw error;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newEvent.title.trim() || !newEvent.date.trim() || !newEvent.description.trim()) {
@@ -325,13 +437,23 @@ const Timeline = () => {
     
     setSubmitting(true);
     try {
+      let imageUrl = '';
+      
+      // 이미지가 있으면 업로드
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+      
       // 새 이벤트를 'events' 컬렉션에 추가
       await addDoc(collection(db, 'events'), {
         ...newEvent,
+        imageUrl,
         createdAt: new Date().toISOString()
       });
       
       alert('이벤트가 성공적으로 추가되었습니다!');
+      
+      // 폼 초기화
       setNewEvent({
         title: '',
         date: '',
@@ -339,6 +461,9 @@ const Timeline = () => {
         description: '',
         imageUrl: ''
       });
+      setImageFile(null);
+      setImagePreview(null);
+      setShowForm(false);
       
       // 이벤트 목록 새로고침
       loadEvents();
@@ -358,6 +483,10 @@ const Timeline = () => {
     return category ? category.name : categoryId;
   };
 
+  const toggleForm = () => {
+    setShowForm(!showForm);
+  };
+
   return (
     <TimelineContainer>
       <Header>
@@ -374,75 +503,6 @@ const Timeline = () => {
           ))}
         </FilterContainer>
       </Header>
-
-      {/* 새 이벤트 추가 폼 */}
-      <AddEventForm onSubmit={handleSubmit}>
-        <FormTitle>새로운 이벤트 추가하기</FormTitle>
-        <InputGroup>
-          <Label htmlFor="title">제목</Label>
-          <Input
-            id="title"
-            name="title"
-            value={newEvent.title}
-            onChange={handleInputChange}
-            required
-          />
-        </InputGroup>
-
-        <InputGroup>
-          <Label htmlFor="date">날짜</Label>
-          <Input
-            id="date"
-            name="date"
-            type="date"
-            value={newEvent.date}
-            onChange={handleInputChange}
-            required
-          />
-        </InputGroup>
-
-        <InputGroup>
-          <Label htmlFor="category">카테고리</Label>
-          <Select
-            id="category"
-            name="category"
-            value={newEvent.category}
-            onChange={handleInputChange}
-          >
-            {categories.slice(1).map(category => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </Select>
-        </InputGroup>
-
-        <InputGroup>
-          <Label htmlFor="imageUrl">이미지 URL (선택사항)</Label>
-          <Input
-            id="imageUrl"
-            name="imageUrl"
-            value={newEvent.imageUrl}
-            onChange={handleInputChange}
-            placeholder="https://example.com/image.jpg"
-          />
-        </InputGroup>
-
-        <InputGroup>
-          <Label htmlFor="description">설명</Label>
-          <TextArea
-            id="description"
-            name="description"
-            value={newEvent.description}
-            onChange={handleInputChange}
-            required
-          />
-        </InputGroup>
-
-        <SubmitButton type="submit" disabled={submitting}>
-          {submitting ? '추가 중...' : '이벤트 추가하기'}
-        </SubmitButton>
-      </AddEventForm>
 
       {/* 타임라인 표시 */}
       {loading ? (
@@ -478,6 +538,89 @@ const Timeline = () => {
         >
           더 보기
         </LoadMoreButton>
+      )}
+
+      {/* 새 이벤트 추가 토글 버튼 */}
+      <ToggleFormButton onClick={toggleForm}>
+        {showForm ? '입력 양식 닫기' : '새 이벤트 추가하기'}
+      </ToggleFormButton>
+
+      {/* 새 이벤트 추가 폼 (토글) */}
+      {showForm && (
+        <CompactAddEventForm onSubmit={handleSubmit}>
+          <FormTitle>새로운 이벤트 추가하기</FormTitle>
+          <InputGroup>
+            <Label htmlFor="title">제목</Label>
+            <Input
+              id="title"
+              name="title"
+              value={newEvent.title}
+              onChange={handleInputChange}
+              required
+            />
+          </InputGroup>
+
+          <InputGroup>
+            <Label htmlFor="date">날짜</Label>
+            <Input
+              id="date"
+              name="date"
+              type="date"
+              value={newEvent.date}
+              onChange={handleInputChange}
+              required
+            />
+          </InputGroup>
+
+          <InputGroup>
+            <Label htmlFor="category">카테고리</Label>
+            <Select
+              id="category"
+              name="category"
+              value={newEvent.category}
+              onChange={handleInputChange}
+            >
+              {categories.slice(1).map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
+          </InputGroup>
+
+          <FileUploadContainer>
+            <Label>이미지 업로드</Label>
+            <FileUploadButton>
+              <span>{imageFile ? imageFile.name : '이미지 파일을 선택하거나 끌어서 놓으세요'}</span>
+              <FileInput
+                type="file"
+                accept="image/*"
+                onChange={handleImageChange}
+                ref={fileInputRef}
+              />
+            </FileUploadButton>
+            {imagePreview && (
+              <ImagePreview>
+                <img src={imagePreview} alt="미리보기" />
+              </ImagePreview>
+            )}
+          </FileUploadContainer>
+
+          <InputGroup>
+            <Label htmlFor="description">설명</Label>
+            <TextArea
+              id="description"
+              name="description"
+              value={newEvent.description}
+              onChange={handleInputChange}
+              required
+            />
+          </InputGroup>
+
+          <SubmitButton type="submit" disabled={submitting}>
+            {submitting ? '추가 중...' : '이벤트 추가하기'}
+          </SubmitButton>
+        </CompactAddEventForm>
       )}
     </TimelineContainer>
   );

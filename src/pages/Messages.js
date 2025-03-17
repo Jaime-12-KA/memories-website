@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { collection, addDoc, getDocs, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const MessagesContainer = styled.div`
   max-width: 1200px;
@@ -200,6 +201,55 @@ const EmptyText = styled.div`
   font-size: 1.1rem;
 `;
 
+const FileUploadContainer = styled.div`
+  margin-bottom: 15px;
+  position: relative;
+`;
+
+const FileInput = styled.input`
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+`;
+
+const FileUploadButton = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border: 1px dashed #ddd;
+  border-radius: 5px;
+  background-color: #f8f9fa;
+  cursor: pointer;
+  height: 100px;
+
+  &:hover {
+    background-color: #e9ecef;
+  }
+`;
+
+const ImagePreview = styled.div`
+  margin-top: 10px;
+  img {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 5px;
+  }
+`;
+
+const MessageImage = styled.img`
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 10px;
+`;
+
 const categories = [
   { id: 'all', name: '전체' },
   { id: 'love', name: '사랑' },
@@ -218,6 +268,9 @@ const Messages = () => {
     content: '',
     category: 'love'
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     loadMessages();
@@ -247,6 +300,48 @@ const Messages = () => {
     }
   };
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // 이미지 파일 타입 검사
+    if (!file.type.match('image.*')) {
+      alert('이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    
+    // 파일 크기 제한 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('파일 크기가 5MB를 초과할 수 없습니다.');
+      return;
+    }
+    
+    setImageFile(file);
+    
+    // 이미지 미리보기 생성
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 이미지 업로드 함수
+  const uploadImage = async (file) => {
+    if (!file) return null;
+    
+    const storageRef = ref(storage, `message_images/${Date.now()}_${file.name}`);
+    
+    try {
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      console.error('이미지 업로드 오류:', error);
+      throw error;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newMessage.title.trim() || !newMessage.content.trim()) {
@@ -256,8 +351,16 @@ const Messages = () => {
 
     setLoading(true);
     try {
+      let imageUrl = '';
+      
+      // 이미지가 있으면 업로드
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
       await addDoc(collection(db, 'messages'), {
         ...newMessage,
+        imageUrl,
         date: new Date().toISOString()
       });
 
@@ -266,6 +369,8 @@ const Messages = () => {
         content: '',
         category: 'love'
       });
+      setImageFile(null);
+      setImagePreview(null);
 
       loadMessages();
     } catch (error) {
@@ -305,6 +410,11 @@ const Messages = () => {
     setExpandedMessage(expandedMessage === messageId ? null : messageId);
   };
 
+  const getCategoryName = (categoryId) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category ? category.name : '미분류';
+  };
+
   return (
     <MessagesContainer>
       <Header>
@@ -317,14 +427,16 @@ const Messages = () => {
             >
               전체
             </FilterButton>
-            {categories.map(category => (
-              <FilterButton
-                key={category.id}
-                active={selectedCategory === category.id}
-                onClick={() => setSelectedCategory(category.id)}
-              >
-                {category.name}
-              </FilterButton>
+            {categories.slice(1).map(category => (
+              category.id !== 'all' && (
+                <FilterButton
+                  key={category.id}
+                  active={selectedCategory === category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                >
+                  {category.name}
+                </FilterButton>
+              )
             ))}
           </FilterContainer>
         </FilterSection>
@@ -332,72 +444,102 @@ const Messages = () => {
 
       <MessageForm onSubmit={handleSubmit}>
         <FormGroup>
-          <Label>제목</Label>
+          <Label htmlFor="title">제목</Label>
           <Input
-            type="text"
+            id="title"
             name="title"
             value={newMessage.title}
             onChange={handleChange}
-            placeholder="메시지 제목을 입력하세요"
+            required
           />
         </FormGroup>
+
         <FormGroup>
-          <Label>카테고리</Label>
-          <Input
-            as="select"
-            name="category"
-            value={newMessage.category}
-            onChange={handleChange}
-          >
-            {categories.filter(cat => cat.id !== 'all').map(category => (
-              <option key={category.id} value={category.id}>
+          <Label htmlFor="category">카테고리</Label>
+          <FilterContainer>
+            {categories.slice(1).map(category => (
+              <FilterButton
+                key={category.id}
+                active={newMessage.category === category.id}
+                onClick={() => setNewMessage(prev => ({ ...prev, category: category.id }))}
+                type="button"
+              >
                 {category.name}
-              </option>
+              </FilterButton>
             ))}
-          </Input>
+          </FilterContainer>
         </FormGroup>
+
+        <FileUploadContainer>
+          <Label>사진 첨부 (선택사항)</Label>
+          <FileUploadButton>
+            <span>{imageFile ? imageFile.name : '이미지 파일을 선택하거나 끌어서 놓으세요'}</span>
+            <FileInput
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              ref={fileInputRef}
+            />
+          </FileUploadButton>
+          {imagePreview && (
+            <ImagePreview>
+              <img src={imagePreview} alt="미리보기" />
+            </ImagePreview>
+          )}
+        </FileUploadContainer>
+
         <FormGroup>
-          <Label>내용</Label>
+          <Label htmlFor="content">내용</Label>
           <TextArea
+            id="content"
             name="content"
             value={newMessage.content}
             onChange={handleChange}
-            placeholder="메시지 내용을 입력하세요"
+            required
           />
         </FormGroup>
+
         <SubmitButton type="submit" disabled={loading}>
-          {loading ? '저장 중...' : '메시지 남기기'}
+          {loading ? '저장 중...' : '메시지 작성하기'}
         </SubmitButton>
       </MessageForm>
 
-      <MessageGrid>
-        {loading ? (
-          <LoadingText>로딩 중...</LoadingText>
-        ) : messages.length === 0 ? (
-          <EmptyText>메시지가 없습니다.</EmptyText>
-        ) : (
-          messages.map(message => (
-            <MessageCard key={message.id} onClick={() => handleMessageClick(message.id)}>
+      {loading ? (
+        <LoadingText>메시지를 불러오는 중...</LoadingText>
+      ) : messages.length === 0 ? (
+        <EmptyText>메시지가 없습니다. 첫 번째 메시지를 작성해보세요!</EmptyText>
+      ) : (
+        <MessageGrid>
+          {messages.map(message => (
+            <MessageCard 
+              key={message.id} 
+              onClick={() => handleMessageClick(message.id)}
+            >
+              {message.imageUrl && (
+                <MessageImage src={message.imageUrl} alt={message.title} />
+              )}
               <MessageTitle>
                 {message.title}
-                <DeleteButton onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(message.id);
-                }}>×</DeleteButton>
+                <MessageCategory>{getCategoryName(message.category)}</MessageCategory>
               </MessageTitle>
+              <MessageMeta>
+                {new Date(message.date).toLocaleDateString()}
+              </MessageMeta>
               <MessageContent isExpanded={expandedMessage === message.id}>
                 {message.content}
               </MessageContent>
-              <MessageMeta>
-                <MessageCategory>
-                  {categories.find(c => c.id === message.category)?.name}
-                </MessageCategory>
-                <span>{new Date(message.date).toLocaleDateString()}</span>
-              </MessageMeta>
+              <DeleteButton 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(message.id);
+                }}
+              >
+                ×
+              </DeleteButton>
             </MessageCard>
-          ))
-        )}
-      </MessageGrid>
+          ))}
+        </MessageGrid>
+      )}
     </MessagesContainer>
   );
 };
